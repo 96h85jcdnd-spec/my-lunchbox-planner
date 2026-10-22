@@ -1,0 +1,167 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#287653">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lunchbox Planner">
+<title>My Lunchbox Planner</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#20352a;background:#f4f8f3}
+*{box-sizing:border-box}body{margin:0}header{background:#287653;color:white;padding:22px 18px;border-radius:0 0 22px 22px}
+h1{font-size:25px;margin:0 0 6px}header p{margin:0;font-size:14px}
+main{padding:14px;max-width:720px;margin:auto}.total{font-size:25px;font-weight:800}
+nav{display:flex;gap:7px;overflow:auto;margin:15px 0}
+button,select,input{font:inherit}button{border:0;border-radius:10px;padding:10px 13px;background:#e3eee5;color:#245d3e;cursor:pointer}
+nav button{white-space:nowrap}nav button.active,.primary{background:#287653;color:white}
+.card{background:white;border:1px solid #e0e9df;border-radius:15px;padding:15px;margin-bottom:12px}
+h2{font-size:18px;margin:0 0 12px}h3{font-size:16px;margin:0 0 7px}
+label{display:block;font-size:12px;color:#607367;margin:9px 0 4px}
+input,select{width:100%;padding:10px;border:1px solid #d5e1d6;border-radius:9px;background:white;color:#20352a}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.day{border:1px solid #e0e9df;border-radius:12px;padding:12px;margin-bottom:10px;background:white}
+.small{font-size:12px;color:#64766a}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ingredient{display:grid;grid-template-columns:1.5fr .65fr .75fr .9fr;gap:5px;margin:7px 0}
+.ingredient input{min-width:0;padding:7px;font-size:12px}
+.check{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #e6ece5}
+.check input{width:20px;height:20px}.muted{color:#758477}.favorite{color:#b78312}
+footer{text-align:center;font-size:12px;color:#718074;padding:12px}
+@media(max-width:380px){.grid{grid-template-columns:1fr}.ingredient{grid-template-columns:1.3fr .6fr .7fr .8fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🥪 My Lunchbox Planner</h1>
+  <p>Your menu, your meals, your shopping list.</p>
+  <div style="margin-top:18px;font-size:12px">ESTIMATED WEEKLY SHOPPING TOTAL</div>
+  <div class="total" id="total">R0.00</div>
+</header>
+<main>
+<nav id="nav">
+<button class="active" data-tab="menu">📅 Menu</button>
+<button data-tab="meals">🍎 My meals</button>
+<button data-tab="shopping">🛒 Shopping</button>
+<button data-tab="favourites">⭐ Favourites</button>
+</nav>
+<div id="app"></div>
+</main>
+<footer>My Lunchbox Planner · Prices in South African rand</footer>
+<script>
+const days=["Monday","Tuesday","Wednesday","Thursday","Friday"];
+const cats=["Breakfast","Lunch","Snacks"];
+const money=n=>"R"+Number(n||0).toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});
+const key=(name,unit)=>(name.trim().toLowerCase()+"|"+unit.trim().toLowerCase());
+const initial={
+ meals:[
+ {id:"1",name:"Peanut butter sandwich",cat:"Lunch",fav:true,ings:[{name:"Bread",qty:4,unit:"slices",price:1.2},{name:"Peanut butter",qty:30,unit:"g",price:.08}]},
+ {id:"2",name:"Cheese sandwich",cat:"Lunch",fav:true,ings:[{name:"Bread",qty:4,unit:"slices",price:1.2},{name:"Cheese",qty:40,unit:"g",price:.16}]},
+ {id:"3",name:"Chicken sandwich",cat:"Lunch",fav:false,ings:[{name:"Bread",qty:4,unit:"slices",price:4.8},{name:"Cooked chicken",qty:100,unit:"g",price:.12},{name:"Mayonnaise",qty:20,unit:"g",price:.06}]},
+ {id:"4",name:"Boiled eggs and bread",cat:"Lunch",fav:false,ings:[{name:"Eggs",qty:2,unit:"each",price:3.5},{name:"Bread",qty:4,unit:"slices",price:1.2}]},
+ {id:"5",name:"Fresh fruit",cat:"Snacks",fav:true,ings:[{name:"Bananas",qty:2,unit:"each",price:3}]},
+ {id:"6",name:"Yoghurt",cat:"Snacks",fav:true,ings:[{name:"Yoghurt",qty:2,unit:"portions",price:5}]},
+ {id:"7",name:"Oats",cat:"Breakfast",fav:false,ings:[{name:"Oats",qty:100,unit:"g",price:.07},{name:"Milk",qty:300,unit:"ml",price:.025}]}
+ ],
+ plan:{},prices:{},checked:[],tab:"menu",edit:null
+};
+days.forEach(d=>initial.plan[d]={Breakfast:"7",Lunch:"",Snacks:"5"});
+initial.plan.Monday.Lunch="1";
+initial.plan.Tuesday.Lunch="2";
+initial.plan.Wednesday.Lunch="4";
+initial.plan.Thursday.Lunch="3";
+initial.plan.Friday.Lunch="2";
+let s;
+try{s=JSON.parse(localStorage.getItem("lunchbox-data"))||initial}catch(e){s=initial}
+if(!s.meals||!s.plan)s=initial;
+function save(){try{localStorage.setItem("lunchbox-data",JSON.stringify(s))}catch(e){}}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function price(i){return Number(s.prices[key(i.name,i.unit)]??i.price??0)}
+function cost(m){return m.ings.reduce((n,i)=>n+i.qty*price(i),0)}
+function items(){
+ let out={};
+ days.forEach(d=>cats.forEach(c=>{
+ let m=s.meals.find(x=>x.id===s.plan[d]?.[c]);if(!m)return;
+ m.ings.forEach(i=>{let k=key(i.name,i.unit);if(!out[k])out[k]={key:k,name:i.name,unit:i.unit,qty:0,uses:0,price:price(i)};
+ out[k].qty+=Number(i.qty);out[k].uses++});
+ }));
+ return Object.values(out).sort((a,b)=>a.name.localeCompare(b.name));
+}
+function total(){return items().reduce((n,i)=>n+i.qty*i.price,0)}
+function options(cat,id){return '<option value="">— Choose a meal —</option>'+s.meals.filter(m=>m.cat===cat).map(m=>`<option value="${esc(m.id)}" ${m.id===id?"selected":""}>${esc(m.name)}</option>`).join("")}
+function menu(){
+return `<div class="card"><h2>My weekly menu</h2><p class="small">Choose meals for both children. Your shopping list updates automatically.</p><button data-act="clear">Clear this week</button></div>
+${days.map(d=>`<section class="day"><div class="row"><h3>${d}</h3><span class="small">School lunchbox</span></div>
+${cats.map(c=>`<label>${c}</label><select data-day="${d}" data-cat="${c}">${options(c,s.plan[d][c])}</select>
+${s.plan[d][c]?`<div class="small" style="margin-top:5px">Meal estimate: ${money(cost(s.meals.find(m=>m.id===s.plan[d][c])))}</div>`:""}`).join("")}</section>`).join("")}
+<div class="card"><div class="row"><div><div class="small">WEEKLY TOTAL</div><div class="total">${money(total())}</div></div><button class="primary" data-act="shopping">Shopping list →</button></div></div>`;
+}
+function form(){
+let m=s.meals.find(x=>x.id===s.edit);
+let ings=m?m.ings:[{name:"",qty:1,unit:"each",price:0}];
+return `<div class="card"><h2>${m?"Edit meal":"Add your own meal"}</h2>
+<form id="mealform"><label>Meal name</label><input id="name" required placeholder="e.g. Chicken wrap" value="${esc(m?.name||"")}">
+<label>Section</label><select id="cat">${cats.map(c=>`<option ${m?.cat===c?"selected":""}>${c}</option>`).join("")}</select>
+<label>Ingredients, quantities and prices</label><div class="small">Enter the cost per unit in rand (R).</div>
+<div id="ings">${ings.map(i=>ingRow(i)).join("")}</div>
+<div class="actions"><button type="button" data-act="adding">+ Ingredient</button></div>
+<div class="actions"><button class="primary" type="submit">Save meal</button><button type="button" data-act="cancel">Cancel</button></div></form></div>
+<h2>My saved meals (${s.meals.length})</h2>
+${s.meals.map(m=>`<div class="card"><div class="row"><div><b>${esc(m.name)} ${m.fav?"<span class='favorite'>★</span>":""}</b><div class="small">${esc(m.cat)} · ${money(cost(m))}</div></div><button data-act="edit" data-id="${m.id}">Edit</button></div>
+<div class="small" style="margin-top:8px">${m.ings.map(i=>`${esc(i.name)}: ${i.qty} ${esc(i.unit)}`).join(" · ")}</div>
+<div class="actions"><button data-act="fav" data-id="${m.id}">${m.fav?"★ Favourite":"☆ Save favourite"}</button><button data-act="delete" data-id="${m.id}">Delete</button></div></div>`).join("")}`;
+}
+function ingRow(i){return `<div class="ingredient"><input class="iname" aria-label="Ingredient" placeholder="Bread" value="${esc(i.name)}"><input class="iqty" aria-label="Quantity" type="number" min="0" step="any" value="${esc(i.qty)}"><input class="iunit" aria-label="Unit" placeholder="each" value="${esc(i.unit)}"><input class="iprice" aria-label="Price per unit" type="number" min="0" step="any" value="${esc(i.price)}"></div>`}
+function shopping(){
+let list=items();
+return `<div class="card"><h2>My shopping list 🛒</h2><div class="small">Change any price to update your total. Amounts combine all the selected meals.</div><div class="total" style="margin:12px 0">${money(total())}</div><button data-act="uncheck">Uncheck all</button></div>
+${list.length?`<div class="card"><h3>Items to buy</h3>${list.map(i=>`<div class="check"><input type="checkbox" data-check="${esc(i.key)}" ${s.checked.includes(i.key)?"checked":""}><div style="flex:1"><b>${esc(i.name)}</b><div class="small">${i.qty.toFixed(2)} ${esc(i.unit)} · ${i.uses} meal uses</div></div><div style="text-align:right"><b>${money(i.qty*i.price)}</b><label>R / ${esc(i.unit)}</label><input style="width:95px" type="number" min="0" step="any" data-price="${esc(i.key)}" value="${i.price}"></div></div>`).join("")}</div>`:`<div class="card">Your list is empty. Choose meals in My menu first.</div>`}`;
+}
+function favourites(){
+let f=s.meals.filter(m=>m.fav);
+return `<div class="card"><h2>My favourite meals ⭐</h2><p class="small">Save meals you want to use again.</p></div>${f.length?f.map(m=>`<div class="card"><div class="row"><div><b>${esc(m.name)}</b><div class="small">${esc(m.cat)} · ${money(cost(m))}</div></div><button data-act="assign" data-id="${m.id}">Add to menu</button></div></div>`).join(""):'<div class="card">No favourites yet. Save a meal in My meals.</div>'}`;
+}
+function render(){
+document.getElementById("total").textContent=money(total());
+document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===s.tab));
+document.getElementById("app").innerHTML=s.tab==="menu"?menu():s.tab==="meals"?form():s.tab==="shopping"?shopping():favourites();
+}
+function tab(t){s.tab=t;save();render();window.scrollTo(0,0)}
+document.getElementById("nav").addEventListener("click",e=>{let b=e.target.closest("[data-tab]");if(b)tab(b.dataset.tab)});
+document.getElementById("app").addEventListener("change",e=>{
+let el=e.target;
+if(el.dataset.day){s.plan[el.dataset.day][el.dataset.cat]=el.value;s.checked=[];save();render()}
+if(el.dataset.check){s.checked=el.checked?[...new Set([...s.checked,el.dataset.check])]:s.checked.filter(k=>k!==el.dataset.check);save();render()}
+if(el.dataset.price){s.prices[el.dataset.price]=Math.max(0,Number(el.value)||0);save();render()}
+});
+document.getElementById("app").addEventListener("click",e=>{
+let b=e.target.closest("[data-act]");if(!b)return;
+let id=b.dataset.id,m=s.meals.find(x=>x.id===id);
+switch(b.dataset.act){
+case "shopping":tab("shopping");break;
+case "clear":if(confirm("Clear the week's menu? Saved meals will remain.")){days.forEach(d=>cats.forEach(c=>s.plan[d][c]=""));s.checked=[];save();render()}break;
+case "adding":document.getElementById("ings").insertAdjacentHTML("beforeend",ingRow({name:"",qty:1,unit:"each",price:0}));break;
+case "cancel":s.edit=null;render();break;
+case "edit":s.edit=id;render();break;
+case "fav":if(m)m.fav=!m.fav;save();render();break;
+case "delete":if(m&&confirm("Delete "+m.name+"?")){s.meals=s.meals.filter(x=>x.id!==id);days.forEach(d=>cats.forEach(c=>{if(s.plan[d][c]===id)s.plan[d][c]=""}));s.edit=null;save();render()}break;
+case "uncheck":s.checked=[];save();render();break;
+case "assign":if(m){let d=prompt("Which day? Type Monday, Tuesday, Wednesday, Thursday or Friday.","Monday");let day=days.find(x=>x.toLowerCase()===String(d||"").trim().toLowerCase());if(day){s.plan[day][m.cat]=m.id;tab("menu")}else if(d)alert("Please enter a weekday from Monday to Friday.")}break;
+}
+});
+document.getElementById("app").addEventListener("submit",e=>{
+if(e.target.id!=="mealform")return;e.preventDefault();
+let name=document.getElementById("name").value.trim(),cat=document.getElementById("cat").value;
+let ings=[...document.querySelectorAll("#ings .ingredient")].map(r=>({name:r.querySelector(".iname").value.trim(),qty:Math.max(0,Number(r.querySelector(".iqty").value)||0),unit:r.querySelector(".iunit").value.trim()||"each",price:Math.max(0,Number(r.querySelector(".iprice").value)||0)})).filter(i=>i.name);
+if(!ings.length){alert("Add at least one ingredient.");return}
+if(s.edit){let m=s.meals.find(x=>x.id===s.edit);if(m){m.name=name;m.cat=cat;m.ings=ings}}
+else s.meals.push({id:String(Date.now()),name,cat,fav:false,ings});
+ings.forEach(i=>{let k=key(i.name,i.unit);if(s.prices[k]===undefined)s.prices[k]=i.price});
+s.edit=null;save();render();
+});
+render();
+</script>
+</body>
+</html>
